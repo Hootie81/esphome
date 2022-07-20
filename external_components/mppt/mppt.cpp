@@ -227,9 +227,9 @@ void MPPTComponent::read_sensors_() {
     this->status_set_warning();
     return;
   }
-  status_index = reg_status & MPPT_CHG_STATUS_CHG_ST_MASK;
+
   if (this->system_status_sensor_ != nullptr)
-    this->system_status_sensor_->publish_state(status_index);
+    this->system_status_sensor_->publish_state(reg_status & MPPT_CHG_STATUS_CHG_ST_MASK);
 
   
   this->status_clear_warning();

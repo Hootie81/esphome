@@ -1,6 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import i2c, sensor, text_sensor
+from esphome.components import i2c, sensor
 from esphome.const import (
     CONF_ID,
     CONF_ICON,
@@ -124,11 +124,8 @@ CONFIG_SCHEMA = (
                 accuracy_decimals=0,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
-            cv.Optional(CONF_SYSTEM_STATUS): text_sensor.TEXT_SENSOR_SCHEMA.extend(
-                {
-                    cv.GenerateID(): cv.declare_id(text_sensor.TextSensor),
-                    cv.Optional(CONF_ICON, default=ICON_RESTART): cv.icon,
-                }
+            cv.Optional(CONF_SYSTEM_STATUS): sensor.sensor_schema(
+                accuracy_decimals=0,
             ),
         }
     )
@@ -177,11 +174,11 @@ async def to_code(config):
     if CONF_BATTERY_TEMP in config:
         conf = config[CONF_BATTERY_TEMP]
         sens = await sensor.new_sensor(conf)
-        cg.add(var.set_charger_temperature_sensor(sens))
+        cg.add(var.set_battery_temperature_sensor(sens))
     if CONF_CHARGER_TEMP in config:
         conf = config[CONF_CHARGER_TEMP]
         sens = await sensor.new_sensor(conf)
-        cg.add(var.set_battery_temperature_sensor(sens))
+        cg.add(var.set_charger_temperature_sensor(sens))
     if CONF_MPPT_TARGET in config:
         conf = config[CONF_MPPT_TARGET]
         sens = await sensor.new_sensor(conf)
@@ -195,6 +192,6 @@ async def to_code(config):
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_buck_dutycycle_sensor(sens))
     if CONF_SYSTEM_STATUS in config:
-        sens = cg.new_Pvariable(config[CONF_SYSTEM_STATUS][CONF_ID])
-        await text_sensor.register_text_sensor(sens, config[CONF_SYSTEM_STATUS])
+        conf = config[CONF_SYSTEM_STATUS]
+        sens = await sensor.new_sensor(conf)
         cg.add(var.set_system_status_sensor(sens))

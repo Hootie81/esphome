@@ -3,7 +3,6 @@
 #include "esphome/core/component.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/i2c/i2c.h"
-#include "esphome/components/text_sensor/text_sensor.h"
 
 namespace esphome {
 namespace mppt {
@@ -23,7 +22,7 @@ class MPPTComponent : public PollingComponent, public i2c::I2CDevice {
 		void set_mppt_target_voltage_sensor(sensor::Sensor *mppt_target_voltage_sensor) { mppt_target_voltage_sensor_ = mppt_target_voltage_sensor; }
 		void set_charge_target_voltage_sensor(sensor::Sensor *charge_target_voltage_sensor) { charge_target_voltage_sensor_ = charge_target_voltage_sensor; }
 		void set_buck_dutycycle_sensor(sensor::Sensor *buck_dutycycle_sensor) { buck_dutycycle_sensor_ = buck_dutycycle_sensor; }
-		void set_system_status_sensor(text_sensor::TextSensor *system_status_sensor) { system_status_sensor_ = system_status_sensor; }
+		void set_system_status_sensor(sensor::Sensor *system_status_sensor) { system_status_sensor_ = system_status_sensor; }
 
 		/// Schedule temperature+pressure readings.
 		void update() override;
@@ -50,7 +49,7 @@ class MPPTComponent : public PollingComponent, public i2c::I2CDevice {
 		sensor::Sensor *mppt_target_voltage_sensor_{nullptr};
 		sensor::Sensor *charge_target_voltage_sensor_{nullptr};
 		sensor::Sensor *buck_dutycycle_sensor_{nullptr};
-		text_sensor::TextSensor *system_status_sensor_{nullptr};
+		sensor::Sensor *system_status_sensor_{nullptr};
 };
 
 }  // namespace bmp085
