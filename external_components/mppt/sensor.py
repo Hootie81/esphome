@@ -17,6 +17,8 @@ from esphome.const import (
     UNIT_WATT,
     UNIT_PERCENT,
     ICON_RESTART,
+    ENTITY_CATEGORY_CONFIG,
+    ENTITY_CATEGORY_DIAGNOSTIC,
 )
 
 DEPENDENCIES = ["i2c"]
@@ -26,8 +28,6 @@ MPPTComponent = mppt_ns.class_(
     "MPPTComponent", cg.PollingComponent, i2c.I2CDevice
 )
 
-CONF_BATT_CURRENT = "battery_current"
-
 CONF_SOLAR_VOLTAGE = "solar_voltage"
 CONF_SOLAR_CURRENT = "solar_current"
 CONF_SOLAR_POWER = "solar_power"
@@ -35,6 +35,7 @@ CONF_BATTERY_VOLTAGE = "battery_voltage"
 CONF_LOAD_CURRENT = "load_current"
 CONF_LOAD_POWER = "load_power"
 CONF_CHARGE_CURRENT = "charge_current"
+CONF_COULOMB_COUNT = "coulomb_count"
 CONF_CHARGE_POWER = "charge_power"
 CONF_CHARGER_TEMP = "charger_temperature"
 CONF_BATTERY_TEMP = "battery_temperature"
@@ -42,6 +43,16 @@ CONF_MPPT_TARGET = "mppt_target_voltage"
 CONF_CHARGE_TARGET = "charge_target_voltage"
 CONF_BUCK_PWM = "buck_pwm"
 CONF_SYSTEM_STATUS = "system_status"
+CONF_BULKV = "bulkv"
+CONF_FLOATV = "floatv"
+CONF_PWROFFV = "power_off_voltage"
+CONF_PWRONV = "power_on_voltage"
+CONF_WDEN = "wd_enabled"
+CONF_WDCNT = "wd_count"
+CONF_WDPWROFF = "wd_pwroff"
+CONF_SLEEP_TIME = "sleep_time"
+CONF_DIAG_UPDATE_INTERVAL = "diag_update_interval"
+CONF_SENSOR_UPDATE_INTERVAL = "sensor_update_interval"
 
 CONFIG_SCHEMA = (
     cv.Schema(
@@ -49,7 +60,7 @@ CONFIG_SCHEMA = (
             cv.GenerateID(): cv.declare_id(MPPTComponent),
             cv.Optional(CONF_SOLAR_VOLTAGE): sensor.sensor_schema(
                 unit_of_measurement=UNIT_VOLT,
-                accuracy_decimals=3,
+                accuracy_decimals=2,
                 device_class=DEVICE_CLASS_VOLTAGE,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
@@ -61,7 +72,7 @@ CONFIG_SCHEMA = (
             ),
             cv.Optional(CONF_SOLAR_POWER): sensor.sensor_schema(
                 unit_of_measurement=UNIT_WATT,
-                accuracy_decimals=3,
+                accuracy_decimals=1,
                 device_class=DEVICE_CLASS_POWER,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
@@ -79,7 +90,7 @@ CONFIG_SCHEMA = (
             ),
             cv.Optional(CONF_LOAD_POWER): sensor.sensor_schema(
                 unit_of_measurement=UNIT_WATT,
-                accuracy_decimals=3,
+                accuracy_decimals=1,
                 device_class=DEVICE_CLASS_POWER,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
@@ -89,43 +100,94 @@ CONFIG_SCHEMA = (
                 device_class=DEVICE_CLASS_CURRENT,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
+            cv.Optional(CONF_COULOMB_COUNT): sensor.sensor_schema(
+                unit_of_measurement=UNIT_AMPERE,
+                accuracy_decimals=3,
+                device_class=DEVICE_CLASS_CURRENT,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
             cv.Optional(CONF_CHARGE_POWER): sensor.sensor_schema(
                 unit_of_measurement=UNIT_WATT,
-                accuracy_decimals=3,
+                accuracy_decimals=1,
                 device_class=DEVICE_CLASS_POWER,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
             cv.Optional(CONF_CHARGER_TEMP): sensor.sensor_schema(
                 unit_of_measurement=UNIT_CELSIUS,
-                accuracy_decimals=1,
+                accuracy_decimals=2,
                 device_class=DEVICE_CLASS_TEMPERATURE,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
             cv.Optional(CONF_BATTERY_TEMP): sensor.sensor_schema(
                 unit_of_measurement=UNIT_CELSIUS,
-                accuracy_decimals=1,
+                accuracy_decimals=2,
                 device_class=DEVICE_CLASS_TEMPERATURE,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
             cv.Optional(CONF_MPPT_TARGET): sensor.sensor_schema(
                 unit_of_measurement=UNIT_VOLT,
-                accuracy_decimals=3,
+                accuracy_decimals=1,
                 device_class=DEVICE_CLASS_VOLTAGE,
                 state_class=STATE_CLASS_MEASUREMENT,
+                entity_category= ENTITY_CATEGORY_DIAGNOSTIC,
             ),
             cv.Optional(CONF_CHARGE_TARGET): sensor.sensor_schema(
                 unit_of_measurement=UNIT_VOLT,
-                accuracy_decimals=3,
+                accuracy_decimals=1,
                 device_class=DEVICE_CLASS_VOLTAGE,
                 state_class=STATE_CLASS_MEASUREMENT,
+                entity_category= ENTITY_CATEGORY_DIAGNOSTIC,
             ),
             cv.Optional(CONF_BUCK_PWM): sensor.sensor_schema(
                 unit_of_measurement=UNIT_PERCENT,
                 accuracy_decimals=0,
                 state_class=STATE_CLASS_MEASUREMENT,
+                entity_category= ENTITY_CATEGORY_DIAGNOSTIC,
             ),
             cv.Optional(CONF_SYSTEM_STATUS): sensor.sensor_schema(
                 accuracy_decimals=0,
+            ),
+            cv.Optional(CONF_BULKV): sensor.sensor_schema(
+                unit_of_measurement=UNIT_VOLT,
+                accuracy_decimals=3,
+                device_class=DEVICE_CLASS_VOLTAGE,
+                entity_category= ENTITY_CATEGORY_CONFIG,
+            ),
+            cv.Optional(CONF_FLOATV): sensor.sensor_schema(
+                unit_of_measurement=UNIT_VOLT,
+                accuracy_decimals=3,
+                device_class=DEVICE_CLASS_VOLTAGE,
+                entity_category= ENTITY_CATEGORY_CONFIG,
+            ),
+            cv.Optional(CONF_PWROFFV): sensor.sensor_schema(
+                unit_of_measurement=UNIT_VOLT,
+                accuracy_decimals=3,
+                device_class=DEVICE_CLASS_VOLTAGE,
+                entity_category= ENTITY_CATEGORY_CONFIG,
+            ),
+            cv.Optional(CONF_PWRONV): sensor.sensor_schema(
+                unit_of_measurement=UNIT_VOLT,
+                accuracy_decimals=3,
+                device_class=DEVICE_CLASS_VOLTAGE,
+                entity_category= ENTITY_CATEGORY_CONFIG,
+            ),
+            cv.Optional(CONF_WDEN): sensor.sensor_schema(
+                accuracy_decimals=0,
+                entity_category= ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            cv.Optional(CONF_WDCNT): sensor.sensor_schema(
+                accuracy_decimals=0,
+                entity_category= ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            cv.Optional(CONF_WDPWROFF): sensor.sensor_schema(
+                accuracy_decimals=0,
+                entity_category= ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            cv.Optional(CONF_SLEEP_TIME, default=0.0): cv.All(
+                cv.Range(min=0.0, max=600.0)
+            ),
+            cv.Optional(CONF_SENSOR_UPDATE_INTERVAL, default=10.0): cv.All(
+                cv.Range(min=1.0, max=600.0)
             ),
         }
     )
@@ -133,11 +195,13 @@ CONFIG_SCHEMA = (
     .extend(i2c.i2c_device_schema(0x12))
 )
 
-
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await i2c.register_i2c_device(var, config)
+
+    cg.add(var.set_sleep_time(config[CONF_SLEEP_TIME]))
+    cg.add(var.set_sensor_update_interval(config[CONF_SENSOR_UPDATE_INTERVAL]))
 
     if CONF_SOLAR_VOLTAGE in config:
         conf = config[CONF_SOLAR_VOLTAGE]
@@ -167,6 +231,10 @@ async def to_code(config):
         conf = config[CONF_CHARGE_CURRENT]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_charge_current_sensor(sens))
+    if CONF_COULOMB_COUNT in config:
+        conf = config[CONF_COULOMB_COUNT]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_coulomb_count_sensor(sens))
     if CONF_CHARGE_POWER in config:
         conf = config[CONF_CHARGE_POWER]
         sens = await sensor.new_sensor(conf)
@@ -195,3 +263,31 @@ async def to_code(config):
         conf = config[CONF_SYSTEM_STATUS]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_system_status_sensor(sens))
+    if CONF_BULKV in config:
+        conf = config[CONF_BULKV]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_bulkv_sensor(sens))
+    if CONF_FLOATV in config:
+        conf = config[CONF_FLOATV]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_floatv_sensor(sens))
+    if CONF_PWROFFV in config:
+        conf = config[CONF_PWROFFV]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_pwroffv_sensor(sens))
+    if CONF_PWRONV in config:
+        conf = config[CONF_PWRONV]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_pwronv_sensor(sens))
+    if CONF_WDEN in config:
+        conf = config[CONF_WDEN]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_wden_sensor(sens))
+    if CONF_WDCNT in config:
+        conf = config[CONF_WDCNT]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_wdcnt_sensor(sens))
+    if CONF_WDPWROFF in config:
+        conf = config[CONF_WDPWROFF]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_wdpwroff_sensor(sens))

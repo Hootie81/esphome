@@ -3,7 +3,10 @@ esphome:
 
 substitutions:
   disp_name: makerpower-mppt
-  update_time: 10s
+  
+preferences:
+  flash_write_interval: 5min
+
   
 external_components:
   - source:
@@ -14,17 +17,30 @@ external_components:
       
 esp8266:
   board: d1_mini
+  restore_from_flash: true
 
 # Enable logging
 logger:
+  level: INFO
 
 # Enable Home Assistant API
 api:
   encryption:
-    key: "xxxx"
+    key: !secret encryption_key
+  services:
+    - service: makerpower_mppt_sleep
+      variables:
+        sleep_time: int
+      then:
+        - switch.turn_on: output_pin
+        - delay: !lambda 'return sleep_time;'
+        - switch.turn_off: output_pin
+    - service: makerpower_mppt_reset_coulomb
+      then:
+        - sensor.integration.reset: coulomb_counter
 
 ota:
-  password: "xxxx"
+  password: !secret ota_password
 
 wifi:
   ssid: !secret wifi_ssid
@@ -33,46 +49,243 @@ wifi:
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "Makerpower-Mppt Fallback Hotspot"
-    password: "xxxx"
+    password: !secret ap_password
 
 captive_portal:
-    
 
+  
 i2c:
   sda: GPIO4
   scl: GPIO5
-  
+
+switch:
+  - platform: gpio
+    pin:
+      number: GPIO2
+      inverted: true
+    id: output_pin
+    # If ESP reboots, do not attempt to restore switch state
+    restore_mode: always off
+  - platform: safe_mode
+    name: ${disp_name} Restart (Safe Mode)
+    
+time:
+  - platform: homeassistant
+    id: my_time
+    
 sensor:
   - platform: wifi_signal
     name: ${disp_name} WiFi Signal
     update_interval: 60s
+    
   - platform: mppt
+    update_interval: 1s
+    sensor_update_interval: 10
     solar_voltage:
       name: ${disp_name} Solar Voltage
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 3
     solar_current:
       name: ${disp_name} Solar Current
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 3
     solar_power:
       name: ${disp_name} Solar Power
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 3
     battery_voltage:
       name: ${disp_name} Battery Voltage
+      id: batt_voltage
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 3
     load_current:
       name: ${disp_name} Load Current
+      filters:
+        - or:
+          - delta: 0.08
+          - sliding_window_moving_average:
+              window_size: 3
+              send_every: 3
     load_power:
-      name: ${disp_name} Load Power    
+      name: ${disp_name} Load Power
+      id: load_power
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 3
     charge_current:
       name: ${disp_name} Charge Current
+      id: charge_current
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 3
     charge_power:
-      name: ${disp_name} Charge Power  
+      name: ${disp_name} Charge Power
+      id: charge_power
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 3
     charger_temperature:
       name: ${disp_name} Charger Temperature
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 3
     battery_temperature:
       name: ${disp_name} Battery Temperature
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 3
     mppt_target_voltage:
       name: ${disp_name} MPPT Target Voltage
+      filters:
+        or:
+          - sliding_window_moving_average:
+              window_size: 3
+              send_every: 3
+          - delta: 2
     charge_target_voltage:
       name: ${disp_name} Charge Target Voltage
+      id: chg_tgt_voltage
+      filters:
+        or:
+          - quantile:
+              window_size: 3
+              send_every: 3
+              send_first_at: 1
+              quantile: .9
+          - delta: 0.5
     buck_pwm:
       name: ${disp_name} Charger PWM
+      id: buck_pwm
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 3
     system_status:
       name: ${disp_name} Charger Status
+      id: status
+      filters:
+        - delta: 0.3
+    bulkv:
+      name: ${disp_name} Bulk Charge Threshold
+      filters:
+        - delta: 0.005
+    floatv:
+      name: ${disp_name} Float Charge Threshold
+      filters:
+        - delta: 0.005
+    power_off_voltage:
+      name: ${disp_name} Low Battery Threshold
+      filters:
+        - delta: 0.005
+    power_on_voltage:
+      name: ${disp_name} Min Voltage Threshold
+      filters:
+        - delta: 0.005
+    wd_enabled:
+      name: ${disp_name} WD Enabled
+      filters:
+        - delta: 0.5
+    wd_count:
+      name: ${disp_name} WD Counter
+      filters:
+        - delta: 0.5
+    wd_pwroff:
+      name: ${disp_name} Sleep Time
+      filters:
+        - delta: 0.5
+    coulomb_count:
+      id: coulomb_count_sensor
+      internal: true
+    sleep_time: 0
 
+    
+  - platform: bmp085
+    temperature:
+        name: ${disp_name} Outside Temperature
+    pressure:
+          name: ${disp_name} Outside Pressure
+    update_interval: 20s
+    
+  - platform: integration
+    name: ${disp_name} Coulomb Counter
+    id: coulomb_counter
+    sensor: coulomb_count_sensor
+    accuracy_decimals: 0
+    time_unit: s
+    entity_category: diagnostic
+    restore: true
+    min_save_interval: 300s
+    filters:
+      - throttle: 60s
+          
+  - platform: template
+    name: ${disp_name} Battery Level
+    lambda: return(id(coulomb_counter).state);
+    update_interval: 60s
+    unit_of_measurement: '%'
+    accuracy_decimals: 1
+    device_class: battery
+    state_class: measurement
+    filters:
+      - calibrate_linear:
+          - -32400 -> 0
+          - 0 -> 100
+
+  - platform: uptime
+    name: Uptime Sensor
+    id: uptime_sensor
+    update_interval: 60s
+
+binary_sensor:
+  - platform: template
+    name: ${disp_name} Fully Charged
+    lambda: |-
+      if ((id(charge_current).state <= 0.120) 
+        and (id(buck_pwm).state <= 65) 
+        and (id(coulomb_counter).state >= 0) 
+        and (abs((id(batt_voltage).state) - (id(chg_tgt_voltage).state)) <= 0.05 ) 
+        and (id(status).state == 6) 
+        and (id(uptime_sensor).state >= 600)) {
+        return true;
+      } else {
+        return false;
+      }
+
+text_sensor:
+  - platform: template
+    name: ${disp_name} Status
+    icon: mdi:eye
+    lambda: |-
+      if (id(status).state == 0) {
+        return {"Night"};
+      } else if (id(status).state == 1)  {
+        return {"Idle"};
+      } else if (id(status).state == 2)  {
+        return {"VSRCV"};
+      } else if (id(status).state == 3)  {
+        return {"Scan"};
+      } else if (id(status).state == 4)  {
+        return {"Bulk Charge"};
+      } else if (id(status).state == 5)  {
+        return {"Absorption Charge"};
+      } else if (id(status).state == 6)  {
+        return {"Float Charge"};
+      } else {
+        return {"Fault!"};
+      }    
+
+      
+    

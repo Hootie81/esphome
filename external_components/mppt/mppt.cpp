@@ -6,9 +6,6 @@ namespace mppt {
 
 static const char *const TAG = "mppt.sensor";
 
-static const uint8_t MPPT_ADDRESS = 0x12;
-static const uint8_t MPPT_REGISTER_VB = 10;
-static const uint8_t MPPT_REGISTER_IB = 12;
 //
 // Internal register addresses
 //
@@ -33,15 +30,14 @@ static const uint8_t MPPT_CHG_PWRON = 30;
 // Watchdog registers (8-bits)
 static const uint8_t MPPT_WD_EN = 33;
 static const uint8_t MPPT_WD_COUNT = 35;
+// Watchdog registers (16-bits)
 static const uint8_t MPPT_WD_PWROFF = 36;
-
 //
 // ID Register bit masks
 //
 static const uint16_t MPPT_CHG_ID_BRD_ID_MASK = 0xF000;
 static const uint16_t MPPT_CHG_ID_MAJ_REV_MASK = 0x00F0;
 static const uint16_t MPPT_CHG_ID_MIN_REV_MASK = 0x000F;
-
 //
 // Status Register bit masks
 //
@@ -56,7 +52,6 @@ static const uint16_t MPPT_CHG_STATUS_PCTRL_MASK = 0x0020;
 static const uint16_t MPPT_CHG_STATUS_T_LIM_MASK = 0x0010;
 static const uint16_t MPPT_CHG_STATUS_NIGHT_MASK = 0x0008;
 static const uint16_t MPPT_CHG_STATUS_CHG_ST_MASK = 0x0007;
-
 //
 // Status Register Charge States
 //
@@ -67,14 +62,12 @@ static const uint8_t MPPT_CHG_ST_SCAN = 3;
 static const uint8_t MPPT_CHG_ST_BULK = 4;
 static const uint8_t MPPT_CHG_ST_ABSORB = 5;
 static const uint8_t MPPT_CHG_ST_FLOAT = 6;
-
 //
 // Buck Status bit masks
 //
 static const uint16_t MPPT_CHG_BUCK_PWM_MASK = 0xFFC0;
 static const uint16_t MPPT_CHG_BUCK_LIM2_MASK = 0x0002;
 static const uint16_t MPPT_CHG_BUCK_LIM1_MASK = 0x0001;
-
 //
 // Watchdog enable register value
 //
@@ -93,17 +86,27 @@ const char* status_msg[] = {
 };
 
 void MPPTComponent::update() {
-  this->set_timeout("sensors", 5, [this]() { this->read_sensors_(); });
+  this->set_timeout("fast", 1, [this]() { this->read_fast_(); });
+  this->sensor_count_--;
+  if (this->sensor_count_ <= 2){
+    this->sensor_count_ = this->sensor_update_interval_;
+    this->set_timeout("fast", 5, [this]() { this->read_sensors_(); });
+  }
+  if (this->sleep_time_ != 0) {
+    this->output_sleep_();
+  }
 }
 void MPPTComponent::setup() {
   ESP_LOGCONFIG(TAG, "Setting up MPPT Charger...");
-  uint8_t data[2];
-  if (!this->read_bytes(0, data, 2)) {
+  uint16_t ver;
+  if (!this->read_bytes_16(0, &ver, 1)) {
     this->mark_failed();
     return;
   }
-  ESP_LOGCONFIG(TAG, "Board HW ID: %u ", (data[0] >> 4));
-  ESP_LOGCONFIG(TAG, "Board SW ID: %u.%u ", (data[1] >> 4), data[1] & 0xF);
+  ESP_LOGCONFIG(TAG, "Board HW ID: %u ", (ver & MPPT_CHG_ID_BRD_ID_MASK >> 12));
+  ESP_LOGCONFIG(TAG, "Board SW ID: %u.%u ", (ver & MPPT_CHG_ID_MAJ_REV_MASK >> 4), (ver & MPPT_CHG_ID_MIN_REV_MASK));
+  (this->sensor_count_) = 1;
+
 }
 void MPPTComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "MPPT:");
@@ -112,13 +115,14 @@ void MPPTComponent::dump_config() {
     ESP_LOGE(TAG, "Connection with MPPT failed!");
   }
   LOG_UPDATE_INTERVAL(this);
-  uint8_t data[2];
-  if (!this->read_bytes(0, data, 2)) {
+  uint16_t ver;
+  if (!this->read_bytes_16(0, &ver, 1)) {
     this->mark_failed();
     return;
   }
-  ESP_LOGCONFIG(TAG, "Board HW ID: %u ", (data[0] >> 4));
-  ESP_LOGCONFIG(TAG, "Board SW ID: %u.%u ", (data[1] >> 4), data[1] & 0xF);
+
+  ESP_LOGCONFIG(TAG, "Board HW ID: %u ", (ver & MPPT_CHG_ID_BRD_ID_MASK) >> 12);
+  ESP_LOGCONFIG(TAG, "Board SW ID: %u.%u ", (ver & MPPT_CHG_ID_MAJ_REV_MASK) >> 4, (ver & MPPT_CHG_ID_MIN_REV_MASK));
   LOG_SENSOR("  ", "Solar Voltage", this->solar_voltage_sensor_);
   LOG_SENSOR("  ", "Solar Current", this->solar_current_sensor_);
   LOG_SENSOR("  ", "Solar Power", this->solar_power_sensor_);
@@ -129,6 +133,17 @@ void MPPTComponent::dump_config() {
   LOG_SENSOR("  ", "Charge Power", this->charge_power_sensor_);
   LOG_SENSOR("  ", "Charger Temperature", this->charger_temperature_sensor_);
   LOG_SENSOR("  ", "Battery Temperature", this->battery_temperature_sensor_);
+}
+
+void MPPTComponent::read_fast_() {
+  uint16_t reg_ic;
+  if(!this->read_bytes_16(MPPT_CHG_IC, &reg_ic, 1)){
+    this->status_set_warning();
+    return;
+  }
+  if (this->coulomb_count_sensor_ != nullptr)
+    this->coulomb_count_sensor_->publish_state((float) int16_t(reg_ic) / 1000.0f);
+  this->status_clear_warning();
 }
 
 void MPPTComponent::read_sensors_() {
@@ -188,7 +203,7 @@ void MPPTComponent::read_sensors_() {
     return;
   }
   if (this->charger_temperature_sensor_ != nullptr)
-    this->charger_temperature_sensor_->publish_state((float) int16_t(reg_it) / 10.0f);
+    this->charger_temperature_sensor_->publish_state((float) (int16_t(reg_it) / 10.0f + 10.0f));
   uint16_t reg_et;
   if(!this->read_bytes_16(MPPT_CHG_EXT_T, &reg_et, 1)){
     this->status_set_warning();
@@ -231,11 +246,88 @@ void MPPTComponent::read_sensors_() {
   if (this->system_status_sensor_ != nullptr)
     this->system_status_sensor_->publish_state(reg_status & MPPT_CHG_STATUS_CHG_ST_MASK);
 
+  uint8_t reg_wden;
+  if(!this->read_bytes(MPPT_WD_EN, &reg_wden, 1)){
+    this->status_set_warning();
+    return;
+  }
+  if (this->wden_sensor_ != nullptr)
+    this->wden_sensor_->publish_state(reg_wden);
+
+  uint8_t reg_wdcnt;
+  if(!this->read_bytes(MPPT_WD_COUNT, &reg_wdcnt, 1)){
+    this->status_set_warning();
+    return;
+  }
+  if (this->wdcnt_sensor_ != nullptr)
+    this->wdcnt_sensor_->publish_state(reg_wdcnt);
+
+  uint16_t reg_wdpwroff;
+  if(!this->read_bytes_16(MPPT_WD_PWROFF, &reg_wdpwroff, 1)){
+    this->status_set_warning();
+    return;
+  }
+  if (this->wdpwroff_sensor_ != nullptr)
+    this->wdpwroff_sensor_->publish_state(reg_wdpwroff);
+
+  uint16_t reg_bulkv;
+  if(!this->read_bytes_16(MPPT_CHG_BUCK_TH, &reg_bulkv, 1)){
+    this->status_set_warning();
+    return;
+  }
+  if (this->bulkv_sensor_ != nullptr)
+    this->bulkv_sensor_->publish_state((float) (reg_bulkv / 1000.0f));
+
+  uint16_t reg_floatv;
+  if(!this->read_bytes_16(MPPT_CHG_FLOAT_TH, &reg_floatv, 1)){
+    this->status_set_warning();
+    return;
+  }
+  if (this->floatv_sensor_ != nullptr)
+    this->floatv_sensor_->publish_state((float) (reg_floatv / 1000.0f));
+
+  uint16_t reg_pwroffv;
+  if(!this->read_bytes_16(MPPT_CHG_PWROFF, &reg_pwroffv, 1)){
+    this->status_set_warning();
+    return;
+  }
+  if (this->pwroffv_sensor_ != nullptr)
+    this->pwroffv_sensor_->publish_state((float) (reg_pwroffv / 1000.0f));
   
-  this->status_clear_warning();
+  uint16_t reg_pwronv;
+  if(!this->read_bytes_16(MPPT_CHG_PWRON, &reg_pwronv, 1)){
+    this->status_set_warning();
+    return;
+  }
+  if (this->pwronv_sensor_ != nullptr)
+    this->pwronv_sensor_->publish_state((float) (reg_pwronv / 1000.0f));
+
 }
 
 float MPPTComponent::get_setup_priority() const { return setup_priority::DATA; }
+
+void MPPTComponent::output_sleep_() {
+
+  uint16_t pwroff_time = this->sleep_time_;
+  if(!this->write_bytes_16(MPPT_WD_PWROFF, &pwroff_time, 1)){
+    this->status_set_warning();
+    return;
+  }
+  uint8_t wdcnt_time = 240;
+  if(!this->write_bytes(MPPT_WD_COUNT, &wdcnt_time, 1)){
+    this->status_set_warning();
+    return;
+  }
+  uint8_t wd_enable = MPPT_CHG_WD_ENABLE;
+  if(!this->write_bytes(MPPT_WD_EN, &wd_enable, 1)){
+    this->status_set_warning();
+    return;
+  }
+  ESP_LOGCONFIG(TAG, "set value for sleep %f", this->sleep_time_);
+  this->sleep_time_ = 0;
+
+}
+
 
 }  // namespace MPPT
 }  // namespace esphome
