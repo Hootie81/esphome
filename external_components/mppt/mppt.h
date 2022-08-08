@@ -32,7 +32,15 @@ class MPPTComponent : public PollingComponent, public i2c::I2CDevice {
 		void set_wden_sensor(sensor::Sensor *wden_sensor) { wden_sensor_ = wden_sensor; }
 		void set_wdcnt_sensor(sensor::Sensor *wdcnt_sensor) { wdcnt_sensor_ = wdcnt_sensor; }
 		void set_wdpwroff_sensor(sensor::Sensor *wdpwroff_sensor) { wdpwroff_sensor_ = wdpwroff_sensor; }
+		
+		void set_bulkv(float bulkv) { bulkv_ = bulkv; }
+		void set_floatv(float floatv) { floatv_ = floatv; }
+		void set_pwroffv(float pwroffv) { pwroffv_ = pwroffv; }
+		void set_pwronv(float pwronv) { pwronv_ = pwronv; }
+
 		void set_sleep_time(float sleep_time) { sleep_time_ = sleep_time; }
+		void set_sleep_delay(float sleep_delay) { sleep_delay_ = sleep_delay; }
+		void set_wd_en(float wd_en) { wd_en_ = wd_en; }
 		void set_sensor_update_interval(float sensor_update_interval) { sensor_update_interval_ = sensor_update_interval; }
 		
 		/// Schedule temperature+pressure readings.
@@ -48,9 +56,18 @@ class MPPTComponent : public PollingComponent, public i2c::I2CDevice {
 		void read_sensors_();
 		void read_fast_();
 		void output_sleep_();
+		void set_charger_params_();
+
+		float bulkv_;
+		float floatv_;
+		float pwroffv_;
+		float pwronv_;
+
 		float sleep_time_;
+		float sleep_delay_;
 		float sensor_update_interval_;
 		float sensor_count_;
+		float wd_en_;
 		sensor::Sensor *coulomb_count_sensor_{nullptr};
 		sensor::Sensor *solar_voltage_sensor_{nullptr};
 		sensor::Sensor *solar_current_sensor_{nullptr};

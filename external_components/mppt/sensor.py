@@ -50,8 +50,10 @@ CONF_PWRONV = "power_on_voltage"
 CONF_WDEN = "wd_enabled"
 CONF_WDCNT = "wd_count"
 CONF_WDPWROFF = "wd_pwroff"
-CONF_SLEEP_TIME = "sleep_time"
-CONF_DIAG_UPDATE_INTERVAL = "diag_update_interval"
+CONF_SET_BULKV = "set_bulk_charge_voltage"
+CONF_SET_FLOATV = "set_float_charge_voltage"
+CONF_SET_PWROFFV = "set_power_off_voltage"
+CONF_SET_PWRONV = "set_power_on_voltage"
 CONF_SENSOR_UPDATE_INTERVAL = "sensor_update_interval"
 
 CONFIG_SCHEMA = (
@@ -183,8 +185,17 @@ CONFIG_SCHEMA = (
                 accuracy_decimals=0,
                 entity_category= ENTITY_CATEGORY_DIAGNOSTIC,
             ),
-            cv.Optional(CONF_SLEEP_TIME, default=0.0): cv.All(
-                cv.Range(min=0.0, max=600.0)
+            cv.Optional(CONF_SET_BULKV, default=14.7): cv.All(
+                cv.Range(min=14.0, max=15.0)
+            ),
+            cv.Optional(CONF_SET_FLOATV, default=13.65): cv.All(
+                cv.Range(min=13.0, max=14.0)
+            ),
+            cv.Optional(CONF_SET_PWROFFV, default=11.5): cv.All(
+                cv.Range(min=11.0, max=12.5)
+            ),
+            cv.Optional(CONF_SET_PWRONV, default=12.5): cv.All(
+                cv.Range(min=12.0, max=13.0)
             ),
             cv.Optional(CONF_SENSOR_UPDATE_INTERVAL, default=10.0): cv.All(
                 cv.Range(min=1.0, max=600.0)
@@ -200,9 +211,12 @@ async def to_code(config):
     await cg.register_component(var, config)
     await i2c.register_i2c_device(var, config)
 
-    cg.add(var.set_sleep_time(config[CONF_SLEEP_TIME]))
+    cg.add(var.set_bulkv(config[CONF_SET_BULKV]))
+    cg.add(var.set_floatv(config[CONF_SET_FLOATV]))
+    cg.add(var.set_pwroffv(config[CONF_SET_PWROFFV]))
+    cg.add(var.set_pwronv(config[CONF_SET_PWRONV]))
     cg.add(var.set_sensor_update_interval(config[CONF_SENSOR_UPDATE_INTERVAL]))
-
+    
     if CONF_SOLAR_VOLTAGE in config:
         conf = config[CONF_SOLAR_VOLTAGE]
         sens = await sensor.new_sensor(conf)

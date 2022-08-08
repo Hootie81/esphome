@@ -21,7 +21,7 @@ esp8266:
 
 # Enable logging
 logger:
-  level: INFO
+  level: DEBUG
 
 # Enable Home Assistant API
 api:
@@ -31,10 +31,14 @@ api:
     - service: makerpower_mppt_sleep
       variables:
         sleep_time: int
+        sleep_delay: int
+        wd_enable: bool
       then:
-        - switch.turn_on: output_pin
-        - delay: !lambda 'return sleep_time;'
-        - switch.turn_off: output_pin
+        - lambda: |-
+            id(my_mppt).set_sleep_time(sleep_time);
+            id(my_mppt).set_sleep_delay(sleep_delay);
+            id(my_mppt).set_wd_en(wd_enable);
+          
     - service: makerpower_mppt_reset_coulomb
       then:
         - sensor.integration.reset: coulomb_counter
@@ -59,13 +63,6 @@ i2c:
   scl: GPIO5
 
 switch:
-  - platform: gpio
-    pin:
-      number: GPIO2
-      inverted: true
-    id: output_pin
-    # If ESP reboots, do not attempt to restore switch state
-    restore_mode: always off
   - platform: safe_mode
     name: ${disp_name} Restart (Safe Mode)
     
@@ -79,6 +76,7 @@ sensor:
     update_interval: 60s
     
   - platform: mppt
+    id: my_mppt
     update_interval: 1s
     sensor_update_interval: 10
     solar_voltage:
@@ -209,7 +207,10 @@ sensor:
     coulomb_count:
       id: coulomb_count_sensor
       internal: true
-    sleep_time: 0
+    set_bulk_charge_voltage: 14.70
+    set_float_charge_voltage: 13.625
+    set_power_off_voltage: 11.7
+    set_power_on_voltage: 12.7
 
     
   - platform: bmp085
@@ -284,7 +285,7 @@ text_sensor:
       } else if (id(status).state == 6)  {
         return {"Float Charge"};
       } else {
-        return {"Fault!"};
+        return {"Initialising"};
       }    
 
       

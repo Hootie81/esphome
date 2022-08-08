@@ -88,9 +88,10 @@ const char* status_msg[] = {
 void MPPTComponent::update() {
   this->set_timeout("fast", 1, [this]() { this->read_fast_(); });
   this->sensor_count_--;
-  if (this->sensor_count_ <= 2){
+  if (this->sensor_count_ <= 0){
+    ESP_LOGD(TAG, "normal sensor read every %f x update interval", this->sensor_update_interval_);
     this->sensor_count_ = this->sensor_update_interval_;
-    this->set_timeout("fast", 5, [this]() { this->read_sensors_(); });
+    this->set_timeout("fast", 10, [this]() { this->read_sensors_(); });
   }
   if (this->sleep_time_ != 0) {
     this->output_sleep_();
@@ -115,6 +116,7 @@ void MPPTComponent::dump_config() {
     ESP_LOGE(TAG, "Connection with MPPT failed!");
   }
   LOG_UPDATE_INTERVAL(this);
+  ESP_LOGCONFIG(TAG, "normal sensor read every %f x update interval", this->sensor_update_interval_);
   uint16_t ver;
   if (!this->read_bytes_16(0, &ver, 1)) {
     this->mark_failed();
@@ -133,6 +135,22 @@ void MPPTComponent::dump_config() {
   LOG_SENSOR("  ", "Charge Power", this->charge_power_sensor_);
   LOG_SENSOR("  ", "Charger Temperature", this->charger_temperature_sensor_);
   LOG_SENSOR("  ", "Battery Temperature", this->battery_temperature_sensor_);
+  LOG_SENSOR("  ", "MPPT Target Voltage", this->mppt_target_voltage_sensor_);
+  LOG_SENSOR("  ", "Charge Target Voltage", this->charge_target_voltage_sensor_);
+  LOG_SENSOR("  ", "Buck Dutycycle", this->buck_dutycycle_sensor_);
+  LOG_SENSOR("  ", "System Status", this->system_status_sensor_);
+  LOG_SENSOR("  ", "Bulk Voltage Setpoint", this->bulkv_sensor_);
+  LOG_SENSOR("  ", "Float Voltage Setpoint", this->floatv_sensor_);
+  LOG_SENSOR("  ", "Power Off Voltage", this->pwroffv_sensor_);
+  LOG_SENSOR("  ", "Power On Voltage", this->pwronv_sensor_);
+  LOG_SENSOR("  ", "Watchdog Enabled", this->wden_sensor_);
+  LOG_SENSOR("  ", "Watchdog Count", this-> wdcnt_sensor_);
+  LOG_SENSOR("  ", "Watchdog Power Off Time", this->wdpwroff_sensor_);
+	ESP_LOGCONFIG(TAG, "Set Bulk Voltage Setpoint %f", this->bulkv_);
+	ESP_LOGCONFIG(TAG, "Set Float Voltage Setpoint %f", this->floatv_);
+	ESP_LOGCONFIG(TAG, "Set Power Off Voltage Setpoint %f", this->pwroffv_);
+	ESP_LOGCONFIG(TAG, "Set Power On Setpoint %f", this->pwronv_);
+
 }
 
 void MPPTComponent::read_fast_() {
@@ -277,7 +295,6 @@ void MPPTComponent::read_sensors_() {
   }
   if (this->bulkv_sensor_ != nullptr)
     this->bulkv_sensor_->publish_state((float) (reg_bulkv / 1000.0f));
-
   uint16_t reg_floatv;
   if(!this->read_bytes_16(MPPT_CHG_FLOAT_TH, &reg_floatv, 1)){
     this->status_set_warning();
@@ -285,7 +302,6 @@ void MPPTComponent::read_sensors_() {
   }
   if (this->floatv_sensor_ != nullptr)
     this->floatv_sensor_->publish_state((float) (reg_floatv / 1000.0f));
-
   uint16_t reg_pwroffv;
   if(!this->read_bytes_16(MPPT_CHG_PWROFF, &reg_pwroffv, 1)){
     this->status_set_warning();
@@ -293,7 +309,6 @@ void MPPTComponent::read_sensors_() {
   }
   if (this->pwroffv_sensor_ != nullptr)
     this->pwroffv_sensor_->publish_state((float) (reg_pwroffv / 1000.0f));
-  
   uint16_t reg_pwronv;
   if(!this->read_bytes_16(MPPT_CHG_PWRON, &reg_pwronv, 1)){
     this->status_set_warning();
@@ -302,10 +317,48 @@ void MPPTComponent::read_sensors_() {
   if (this->pwronv_sensor_ != nullptr)
     this->pwronv_sensor_->publish_state((float) (reg_pwronv / 1000.0f));
 
+  if ((reg_bulkv != this->bulkv_ * 1000.0f) or
+      (reg_floatv != this->floatv_ * 1000.0f) or
+      (reg_pwroffv != this->pwroffv_ * 1000.0f) or
+      (reg_pwronv != this->pwronv_ * 1000.0f)) {
+        this->set_charger_params_();
+      }
+
 }
 
 float MPPTComponent::get_setup_priority() const { return setup_priority::DATA; }
 
+void MPPTComponent::set_charger_params_() {
+  uint16_t bulkvx = this->bulkv_ * 1000;
+  ESP_LOGI(TAG, "setting value for Bulk Charge Threshold %f", this->bulkv_);
+  if(!this->write_bytes_16(MPPT_CHG_BUCK_TH, &bulkvx, 1)){
+    this->status_set_warning();
+    return;
+  }
+  uint16_t floatvx = this->floatv_ * 1000;
+  ESP_LOGI(TAG, "setting value for Float Charge Threshold %f", this->floatv_);
+  if(!this->write_bytes_16(MPPT_CHG_FLOAT_TH, &floatvx, 1)){
+    this->status_set_warning();
+    return;
+  }
+  uint16_t pwronvx = this->pwronv_ * 1000;
+  ESP_LOGI(TAG, "setting value for Power On Threshold %f", this->pwronv_);
+  if(!this->write_bytes_16(MPPT_CHG_PWRON, &pwronvx, 1)){
+    this->status_set_warning();
+    return;
+  }
+  uint16_t pwroffvx = this->pwroffv_ * 1000;
+  if (pwroffvx > pwronvx){
+    pwroffvx = pwronvx;
+  }
+
+  ESP_LOGI(TAG, "setting value for Power Off Threshold %f", this->pwroffv_);
+  if(!this->write_bytes_16(MPPT_CHG_PWROFF, &pwroffvx, 1)){
+    this->status_set_warning();
+    return;
+  }
+
+}
 void MPPTComponent::output_sleep_() {
 
   uint16_t pwroff_time = this->sleep_time_;
@@ -313,17 +366,21 @@ void MPPTComponent::output_sleep_() {
     this->status_set_warning();
     return;
   }
-  uint8_t wdcnt_time = 240;
+  uint8_t wdcnt_time = this->sleep_delay_;
   if(!this->write_bytes(MPPT_WD_COUNT, &wdcnt_time, 1)){
     this->status_set_warning();
     return;
   }
-  uint8_t wd_enable = MPPT_CHG_WD_ENABLE;
+  uint8_t wd_enable = 0;
+  if (this->wd_en_){
+    wd_enable = MPPT_CHG_WD_ENABLE;
+  } 
   if(!this->write_bytes(MPPT_WD_EN, &wd_enable, 1)){
     this->status_set_warning();
     return;
   }
-  ESP_LOGCONFIG(TAG, "set value for sleep %f", this->sleep_time_);
+  ESP_LOGI(TAG, "set value for sleep %f", this->sleep_time_);
+  ESP_LOGI(TAG, "set value for wd_en_ %f", this->wd_en_);
   this->sleep_time_ = 0;
 
 }
