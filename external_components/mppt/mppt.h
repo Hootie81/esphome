@@ -68,6 +68,7 @@ class MPPTComponent : public PollingComponent, public i2c::I2CDevice {
 		float sensor_update_interval_;
 		float sensor_count_;
 		float wd_en_;
+		uint16_t prev_status_;
 		sensor::Sensor *coulomb_count_sensor_{nullptr};
 		sensor::Sensor *solar_voltage_sensor_{nullptr};
 		sensor::Sensor *solar_current_sensor_{nullptr};
